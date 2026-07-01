@@ -33,7 +33,15 @@ export interface AgentState {
   /** True when agent has no transcript file (provider doesn't use JSONL). All state from hooks. */
   hooksOnly?: boolean;
   /** Provider that created this agent (defaults to 'claude') */
-  providerId?: string;
+  providerId?: 'claude' | 'openrouter';
+  /** Human-facing display name, independent from provider identity */
+  displayName?: string;
+  /** Short provider label shown in the office overlay */
+  providerLabel?: string;
+  /** Role/profile template used to create this agent, if any */
+  profileId?: string;
+  /** Model used by API-backed agents */
+  model?: string;
   /** Set when SessionEnd(reason=clear) fires; cleared when SessionStart(source=clear) reassigns */
   pendingClear?: boolean;
   /** Hook-generated tool ID for PreToolUse/PostToolUse correlation */
@@ -71,6 +79,12 @@ export interface PersistedAgent {
   projectDir: string;
   /** Workspace folder name (only set for multi-root workspaces) */
   folderName?: string;
+  /** Provider that created this agent */
+  providerId?: 'claude' | 'openrouter';
+  displayName?: string;
+  providerLabel?: string;
+  profileId?: string;
+  model?: string;
 
   // -- Agent Teams --
   teamName?: string;

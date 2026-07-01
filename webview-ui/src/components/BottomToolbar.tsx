@@ -9,6 +9,7 @@ import { Dropdown, DropdownItem } from './ui/Dropdown.js';
 interface BottomToolbarProps {
   isEditMode: boolean;
   onOpenClaude: () => void;
+  onOpenOpenRouter: () => void;
   onToggleEditMode: () => void;
   isSettingsOpen: boolean;
   onToggleSettings: () => void;
@@ -18,6 +19,7 @@ interface BottomToolbarProps {
 export function BottomToolbar({
   isEditMode,
   onOpenClaude,
+  onOpenOpenRouter,
   onToggleEditMode,
   isSettingsOpen,
   onToggleSettings,
@@ -120,6 +122,9 @@ export function BottomToolbar({
           </Dropdown>
         </div>
       )}
+      <Button variant="accent" onClick={onOpenOpenRouter} title="오픈라우터 에이전트 생성">
+        + 오픈라우터
+      </Button>
       <Button
         variant={isEditMode ? 'active' : 'default'}
         onClick={onToggleEditMode}

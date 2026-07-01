@@ -9,6 +9,7 @@ import type { AgentStateStore } from './agentStateStore.js';
 import type { AssetCache, SetHooksEnabledSideEffect } from './clientMessageHandler.js';
 import { SERVER_JSON_DIR, SERVER_JSON_NAME } from './constants.js';
 import { createHttpServer } from './httpServer.js';
+import type { OpenRouterAgentRuntime } from './openrouter/runtime.js';
 
 /** Discovery file written to ~/.pixel-agents/server.json so hook scripts can find the server. */
 export interface ServerConfig {
@@ -64,6 +65,7 @@ export class PixelAgentsServer {
   async start(options?: {
     store?: AgentStateStore;
     runtime?: AgentRuntime;
+    openRouterRuntime?: OpenRouterAgentRuntime;
     embedded?: boolean;
     host?: string;
     port?: number;
@@ -93,6 +95,7 @@ export class PixelAgentsServer {
       token,
       store: store!,
       runtime: options?.runtime,
+      openRouterRuntime: options?.openRouterRuntime,
       staticDir: options?.staticDir,
       assetCache: options?.assetCache,
       onHookEvent: (providerId, event) => this.callback?.(providerId, event),

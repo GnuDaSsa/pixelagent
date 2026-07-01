@@ -106,6 +106,8 @@ export async function launchNewTerminal(
     linesProcessed: 0,
     seenUnknownRecordTypes: new Set(),
     folderName,
+    providerId: 'claude',
+    providerLabel: 'Claude',
     hookDelivered: false,
     inputTokens: 0,
     outputTokens: 0,
@@ -265,6 +267,11 @@ export function persistAgents(agents: AgentStateStore, adapter: StateAdapter): v
       jsonlFile: agent.jsonlFile,
       projectDir: agent.projectDir,
       folderName: agent.folderName,
+      providerId: agent.providerId,
+      displayName: agent.displayName,
+      providerLabel: agent.providerLabel,
+      profileId: agent.profileId,
+      model: agent.model,
       teamName: agent.teamName,
       agentName: agent.agentName,
       isTeamLead: agent.isTeamLead,
@@ -350,6 +357,11 @@ export function restoreAgents(
       linesProcessed: 0,
       seenUnknownRecordTypes: new Set(),
       folderName: p.folderName,
+      providerId: p.providerId ?? 'claude',
+      displayName: p.displayName,
+      providerLabel: p.providerLabel ?? 'Claude',
+      profileId: p.profileId,
+      model: p.model,
       hookDelivered: false,
       inputTokens: 0,
       outputTokens: 0,
@@ -504,12 +516,24 @@ export function sendExistingAgents(
   // Include folderName and isExternal per agent
   const folderNames: Record<number, string> = {};
   const externalAgents: Record<number, boolean> = {};
+  const providerIds: Record<number, string> = {};
+  const providerLabels: Record<number, string> = {};
+  const displayNames: Record<number, string> = {};
+  const profileIds: Record<number, string> = {};
   for (const [id, agent] of agents) {
     if (agent.folderName) {
       folderNames[id] = agent.folderName;
     }
     if (agent.isExternal) {
       externalAgents[id] = true;
+    }
+    providerIds[id] = agent.providerId ?? 'claude';
+    providerLabels[id] = agent.providerLabel ?? 'Claude';
+    if (agent.displayName) {
+      displayNames[id] = agent.displayName;
+    }
+    if (agent.profileId) {
+      profileIds[id] = agent.profileId;
     }
   }
   console.log(
@@ -522,6 +546,10 @@ export function sendExistingAgents(
     agentMeta,
     folderNames,
     externalAgents,
+    providerIds,
+    providerLabels,
+    displayNames,
+    profileIds,
   });
   // Note: sendCurrentAgentStatuses is called separately AFTER layoutLoaded
   // so that agentStatus/agentToolStart messages arrive after characters are created.

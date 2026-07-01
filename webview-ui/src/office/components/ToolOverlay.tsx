@@ -19,6 +19,11 @@ import {
   TOOL_OVERLAY_VERTICAL_OFFSET,
 } from '../../constants.js';
 import type { SubagentCharacter } from '../../hooks/useExtensionMessages.js';
+import {
+  localizeActivityText,
+  localizeDisplayName,
+  localizeProviderLabel,
+} from '../../localization.js';
 import type { OfficeState } from '../engine/officeState.js';
 import type { ToolActivity } from '../types.js';
 import { CharacterState, TILE_SIZE } from '../types.js';
@@ -202,7 +207,15 @@ export function ToolOverlay({
         const teamRoleLabel = ch.isTeamLead ? 'LEAD' : ch.agentName || null;
         const totalTokens = ch.inputTokens + ch.outputTokens;
         const tokenRatio = totalTokens / MAX_CONTEXT_TOKENS;
-        const hasExtraLines = !!(ch.folderName || teamRoleLabel);
+        activityText = localizeActivityText(activityText);
+        const teamRoleLabelDisplay = ch.isTeamLead ? '리드' : localizeDisplayName(teamRoleLabel);
+        const displayLabel = localizeDisplayName(
+          ch.displayName ||
+            ch.agentName ||
+            (ch.providerId === 'openrouter' ? 'OpenRouter Agent' : null),
+        );
+        const providerLabel = localizeProviderLabel(ch.providerLabel, ch.providerId);
+        const hasExtraLines = !!(ch.folderName || teamRoleLabel || displayLabel || providerLabel);
 
         return (
           <div
@@ -226,7 +239,7 @@ export function ToolOverlay({
                 />
               )}
               <div className="flex flex-col gap-0 overflow-hidden">
-                {teamRoleLabel && (
+                {teamRoleLabelDisplay && (
                   <span
                     className="overflow-hidden text-ellipsis block leading-none"
                     style={{
@@ -235,7 +248,12 @@ export function ToolOverlay({
                       fontWeight: ch.isTeamLead ? 'bold' : undefined,
                     }}
                   >
-                    {teamRoleLabel}
+                    {teamRoleLabelDisplay}
+                  </span>
+                )}
+                {displayLabel && (
+                  <span className="text-xs leading-none overflow-hidden text-ellipsis block">
+                    {displayLabel}
                   </span>
                 )}
                 <span
@@ -252,6 +270,19 @@ export function ToolOverlay({
                     {ch.folderName}
                   </span>
                 )}
+                {providerLabel && (
+                  <span
+                    className="text-2xs leading-none overflow-hidden text-ellipsis block"
+                    style={{
+                      color:
+                        ch.providerId === 'openrouter'
+                          ? 'var(--color-accent-bright)'
+                          : 'var(--color-text-muted)',
+                    }}
+                  >
+                    {providerLabel}
+                  </span>
+                )}
               </div>
               {isSelected && !isSub && (
                 <Button
@@ -261,7 +292,7 @@ export function ToolOverlay({
                     e.stopPropagation();
                     onCloseAgent(id);
                   }}
-                  title="Close agent"
+                  title="에이전트 닫기"
                   className="ml-2 shrink-0 leading-none"
                 >
                   ×

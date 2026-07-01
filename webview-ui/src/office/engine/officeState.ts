@@ -323,6 +323,12 @@ export class OfficeState {
     preferredSeatId?: string,
     skipSpawnEffect?: boolean,
     folderName?: string,
+    meta?: {
+      providerId?: 'claude' | 'openrouter';
+      providerLabel?: string;
+      displayName?: string;
+      profileId?: string;
+    },
   ): void {
     if (this.characters.has(id)) return;
 
@@ -370,6 +376,10 @@ export class OfficeState {
     if (folderName) {
       ch.folderName = folderName;
     }
+    ch.providerId = meta?.providerId;
+    ch.providerLabel = meta?.providerLabel;
+    ch.displayName = meta?.displayName;
+    ch.profileId = meta?.profileId;
     if (!skipSpawnEffect) {
       ch.matrixEffect = 'spawn';
       ch.matrixEffectTimer = 0;

@@ -19,6 +19,9 @@ export type ServerMessage =
   | AgentToolsClear
   | AgentToolPermission
   | AgentToolPermissionClear
+  | AgentTextDelta
+  | AgentTextDone
+  | AgentRunError
   | SubagentToolStart
   | SubagentToolDone
   | SubagentClear
@@ -38,7 +41,9 @@ export type ServerMessage =
 
 export type ClientMessage =
   | WebviewReady
+  | CreateAgent
   | LaunchAgent
+  | SendTask
   | FocusAgent
   | CloseAgent
   | SaveAgentSeats
@@ -67,7 +72,13 @@ export interface AgentCreated {
   id: number;
   folderName?: string;
   isExternal?: boolean;
+  providerId?: AgentProviderId;
+  providerLabel?: string;
+  displayName?: string;
+  profileId?: string;
 }
+
+export type AgentProviderId = 'claude' | 'openrouter';
 
 export interface AgentClosed {
   type: 'agentClosed';
@@ -85,6 +96,10 @@ export interface ExistingAgents {
   agentMeta: Record<string, AgentSeatMeta>;
   folderNames: Record<string, string>;
   externalAgents: Record<string, boolean>;
+  providerIds?: Record<string, AgentProviderId>;
+  providerLabels?: Record<string, string>;
+  displayNames?: Record<string, string>;
+  profileIds?: Record<string, string>;
 }
 
 export interface AgentSeatMeta {
@@ -131,6 +146,24 @@ export interface AgentToolPermission {
 export interface AgentToolPermissionClear {
   type: 'agentToolPermissionClear';
   id: number;
+}
+
+export interface AgentTextDelta {
+  type: 'agentTextDelta';
+  id: number;
+  delta: string;
+}
+
+export interface AgentTextDone {
+  type: 'agentTextDone';
+  id: number;
+  content: string;
+}
+
+export interface AgentRunError {
+  type: 'agentRunError';
+  id: number;
+  message: string;
 }
 
 export interface SubagentToolStart {
@@ -283,10 +316,25 @@ export interface WebviewReady {
   type: 'webviewReady';
 }
 
+export interface CreateAgent {
+  type: 'createAgent';
+  providerId: AgentProviderId;
+  folderPath?: string;
+  displayName?: string;
+  profileId?: string;
+  model?: string;
+}
+
 export interface LaunchAgent {
   type: 'launchAgent';
   folderPath?: string;
   bypassPermissions?: boolean;
+}
+
+export interface SendTask {
+  type: 'sendTask';
+  id: number;
+  input: string;
 }
 
 export interface FocusAgent {

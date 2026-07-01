@@ -37,6 +37,7 @@ import {
   watchLayoutFile,
   writeLayoutToFile,
 } from '../../server/src/layoutPersistence.js';
+import { OpenRouterAgentRuntime } from '../../server/src/openrouter/runtime.js';
 import { claudeProvider, copyHookScript } from '../../server/src/providers/index.js';
 import { PixelAgentsServer } from '../../server/src/server.js';
 import {
@@ -79,6 +80,7 @@ export class PixelAgentsViewProvider implements vscode.WebviewViewProvider {
 
   // Shared agent lifecycle core (timer Maps, scanners, hook handler, dismissal tracker)
   private runtime: AgentRuntime;
+  private openRouterRuntime: OpenRouterAgentRuntime;
 
   // Global session scanning dismissal tracking
   private globalDismissedFiles = new Set<string>();
@@ -112,6 +114,10 @@ export class PixelAgentsViewProvider implements vscode.WebviewViewProvider {
         id,
         folderName: agent.folderName,
         isExternal: agent.isExternal || undefined,
+        providerId: agent.providerId ?? 'claude',
+        providerLabel: agent.providerLabel ?? 'Claude',
+        displayName: agent.displayName,
+        profileId: agent.profileId,
         isTeammate: agent.leadAgentId !== undefined || undefined,
         teammateName: agent.agentName,
         parentAgentId: agent.leadAgentId,
@@ -130,6 +136,7 @@ export class PixelAgentsViewProvider implements vscode.WebviewViewProvider {
 
     // Create shared runtime (owns timer Maps, scanners, hook handler, dismissal tracker)
     this.runtime = new AgentRuntime(this.store, claudeProvider);
+    this.openRouterRuntime = new OpenRouterAgentRuntime(this.store);
 
     this.initServer();
   }
@@ -197,7 +204,40 @@ export class PixelAgentsViewProvider implements vscode.WebviewViewProvider {
     webviewView.webview.html = getWebviewContent(webviewView.webview, this.extensionUri);
 
     webviewView.webview.onDidReceiveMessage(async (message) => {
-      if (message.type === 'launchAgent') {
+      if (message.type === 'createAgent') {
+        if (message.providerId === 'openrouter') {
+          this.openRouterRuntime.createAgent({
+            cwd: message.cwd as string | undefined,
+            displayName: message.displayName as string | undefined,
+            profileId: message.profileId as string | undefined,
+            model: message.model as string | undefined,
+          });
+        } else {
+          const prevAgentIds = new Set(this.store.keys());
+          await launchNewTerminal(
+            this.store.nextAgentId,
+            this.store.nextTerminalIndex,
+            this.store,
+            this.runtime.activeAgentId,
+            this.runtime.knownJsonlFiles,
+            this.runtime.fileWatchers,
+            this.runtime.pollingTimers,
+            this.runtime.waitingTimers,
+            this.runtime.permissionTimers,
+            this.runtime.jsonlPollTimers,
+            this.runtime.projectScanTimer,
+            () => this.store.persist(),
+            message.cwd as string | undefined,
+          );
+          for (const [id, agent] of this.store) {
+            if (!prevAgentIds.has(id)) {
+              this.runtime.registerAgent(agent.sessionId, id);
+            }
+          }
+        }
+      } else if (message.type === 'sendTask') {
+        void this.openRouterRuntime.sendTask(message.id as number, message.input as string);
+      } else if (message.type === 'launchAgent') {
         const prevAgentIds = new Set(this.store.keys());
         await launchNewTerminal(
           this.store.nextAgentId,
@@ -224,7 +264,9 @@ export class PixelAgentsViewProvider implements vscode.WebviewViewProvider {
       } else if (message.type === 'focusAgent') {
         const agent = this.store.get(message.id);
         if (agent) {
-          if (agent.terminalRef) {
+          if (agent.providerId === 'openrouter') {
+            this.webview?.postMessage({ type: 'agentSelected', id: message.id });
+          } else if (agent.terminalRef) {
             agent.terminalRef.show();
           } else if (agent.leadAgentId !== undefined) {
             // Teammate (tmux): focus the lead's terminal instead
@@ -237,7 +279,9 @@ export class PixelAgentsViewProvider implements vscode.WebviewViewProvider {
       } else if (message.type === 'closeAgent') {
         const agent = this.store.get(message.id);
         if (agent) {
-          if (agent.terminalRef) {
+          if (agent.providerId === 'openrouter') {
+            this.openRouterRuntime.closeAgent(message.id);
+          } else if (agent.terminalRef) {
             agent.terminalRef.dispose();
           } else {
             // External agent -- remove from tracking and dismiss the file

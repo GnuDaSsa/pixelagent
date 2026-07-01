@@ -91,6 +91,9 @@ components:
         - $ref: '#/components/schemas/AgentToolsClear'
         - $ref: '#/components/schemas/AgentToolPermission'
         - $ref: '#/components/schemas/AgentToolPermissionClear'
+        - $ref: '#/components/schemas/AgentTextDelta'
+        - $ref: '#/components/schemas/AgentTextDone'
+        - $ref: '#/components/schemas/AgentRunError'
         # Sub-agent activity
         - $ref: '#/components/schemas/SubagentToolStart'
         - $ref: '#/components/schemas/SubagentToolDone'
@@ -118,7 +121,9 @@ components:
     ClientMessage:
       oneOf:
         - $ref: '#/components/schemas/WebviewReady'
+        - $ref: '#/components/schemas/CreateAgent'
         - $ref: '#/components/schemas/LaunchAgent'
+        - $ref: '#/components/schemas/SendTask'
         - $ref: '#/components/schemas/FocusAgent'
         - $ref: '#/components/schemas/CloseAgent'
         - $ref: '#/components/schemas/SaveAgentSeats'
@@ -175,6 +180,14 @@ components:
           type: string
         isExternal:
           type: boolean
+        providerId:
+          $ref: '#/components/schemas/AgentProviderId'
+        providerLabel:
+          type: string
+        displayName:
+          type: string
+        profileId:
+          type: string
 
     AgentClosed:
       description: An agent has been removed from the office.
@@ -227,6 +240,26 @@ components:
           description: Map of agent ID (string) to external flag.
           additionalProperties:
             type: boolean
+        providerIds:
+          type: object
+          description: Map of agent ID (string) to provider id.
+          additionalProperties:
+            $ref: '#/components/schemas/AgentProviderId'
+        providerLabels:
+          type: object
+          description: Map of agent ID (string) to provider display label.
+          additionalProperties:
+            type: string
+        displayNames:
+          type: object
+          description: Map of agent ID (string) to agent display name.
+          additionalProperties:
+            type: string
+        profileIds:
+          type: object
+          description: Map of agent ID (string) to provider profile id.
+          additionalProperties:
+            type: string
 
     AgentStatus:
       description: Active vs waiting state for an agent (drives character animation).
@@ -251,6 +284,11 @@ components:
       description: Activity state of an agent.
       type: string
       enum: [active, waiting]
+
+    AgentProviderId:
+      description: Backend/provider identity for an agent instance.
+      type: string
+      enum: [claude, openrouter]
 
     AgentToolStart:
       description: Agent began executing a tool.
@@ -319,6 +357,45 @@ components:
           const: agentToolPermissionClear
         id:
           type: integer
+
+    AgentTextDelta:
+      description: Streaming text chunk produced by an API-backed agent.
+      type: object
+      additionalProperties: false
+      required: [type, id, delta]
+      properties:
+        type:
+          const: agentTextDelta
+        id:
+          type: integer
+        delta:
+          type: string
+
+    AgentTextDone:
+      description: Final text response produced by an API-backed agent.
+      type: object
+      additionalProperties: false
+      required: [type, id, content]
+      properties:
+        type:
+          const: agentTextDone
+        id:
+          type: integer
+        content:
+          type: string
+
+    AgentRunError:
+      description: Runtime error from an API-backed agent turn.
+      type: object
+      additionalProperties: false
+      required: [type, id, message]
+      properties:
+        type:
+          const: agentRunError
+        id:
+          type: integer
+        message:
+          type: string
 
     SubagentToolStart:
       description: Sub-agent (e.g. Task) started a tool.
@@ -667,6 +744,26 @@ components:
         type:
           const: webviewReady
 
+    CreateAgent:
+      description: Create an agent for a specific backend provider.
+      type: object
+      additionalProperties: false
+      required: [type, providerId]
+      properties:
+        type:
+          const: createAgent
+        providerId:
+          $ref: '#/components/schemas/AgentProviderId'
+        folderPath:
+          type: string
+          description: Workspace folder path for the agent.
+        displayName:
+          type: string
+        profileId:
+          type: string
+        model:
+          type: string
+
     LaunchAgent:
       description: Launch a new Claude agent in a new terminal.
       type: object
@@ -680,6 +777,19 @@ components:
           description: Workspace folder path (for multi-root workspaces).
         bypassPermissions:
           type: boolean
+
+    SendTask:
+      description: Send a task prompt to an API-backed agent.
+      type: object
+      additionalProperties: false
+      required: [type, id, input]
+      properties:
+        type:
+          const: sendTask
+        id:
+          type: integer
+        input:
+          type: string
 
     FocusAgent:
       description: Focus an agent's terminal.

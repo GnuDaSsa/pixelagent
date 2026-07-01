@@ -8,12 +8,15 @@ import { EditActionBar } from './components/EditActionBar.js';
 import { MigrationNotice } from './components/MigrationNotice.js';
 import { SettingsModal } from './components/SettingsModal.js';
 import { Tooltip } from './components/Tooltip.js';
+import { Button } from './components/ui/Button.js';
 import { Modal } from './components/ui/Modal.js';
 import { VersionIndicator } from './components/VersionIndicator.js';
+import { WorkLogPanel } from './components/WorkLogPanel.js';
 import { ZoomControls } from './components/ZoomControls.js';
 import { useEditorActions } from './hooks/useEditorActions.js';
 import { useEditorKeyboard } from './hooks/useEditorKeyboard.js';
 import { useExtensionMessages } from './hooks/useExtensionMessages.js';
+import { localizeDisplayName } from './localization.js';
 import { OfficeCanvas } from './office/components/OfficeCanvas.js';
 import { ToolOverlay } from './office/components/ToolOverlay.js';
 import { EditorState } from './office/editor/editorState.js';
@@ -81,6 +84,9 @@ function App() {
     hooksEnabled,
     setHooksEnabled,
     hooksInfoShown,
+    agentTranscripts,
+    agentErrors,
+    agentWorkLogs,
   } = useExtensionMessages(getOfficeState, editor.setLastSavedLayout, isEditDirty);
 
   // Show migration notice once layout reset is detected
@@ -93,6 +99,7 @@ function App() {
   const [hooksTooltipDismissed, setHooksTooltipDismissed] = useState(false);
   const [isDebugMode, setIsDebugMode] = useState(false);
   const [alwaysShowOverlay, setAlwaysShowOverlay] = useState(false);
+  const [openRouterInput, setOpenRouterInput] = useState('');
 
   const currentMajorMinor = toMajorMinor(extensionVersion);
 
@@ -142,6 +149,15 @@ function App() {
     transport.send({ type: 'closeAgent', id });
   }, []);
 
+  const handleOpenOpenRouter = useCallback(() => {
+    transport.send({
+      type: 'createAgent',
+      providerId: 'openrouter',
+      displayName: 'Analyst',
+      profileId: 'analyst',
+    });
+  }, []);
+
   const handleClick = useCallback((agentId: number) => {
     // If clicked agent is a sub-agent, focus the parent's terminal instead
     const os = getOfficeState();
@@ -151,6 +167,18 @@ function App() {
   }, []);
 
   const officeState = getOfficeState();
+  const selectedCharacter =
+    selectedAgent !== null ? officeState.characters.get(selectedAgent) : undefined;
+  const selectedOpenRouterAgent =
+    selectedCharacter?.providerId === 'openrouter' ? selectedCharacter : undefined;
+  const selectedOpenRouterAgentId = selectedOpenRouterAgent?.id ?? null;
+  const handleSendOpenRouterTask = () => {
+    if (selectedOpenRouterAgentId === null) return;
+    const input = openRouterInput.trim();
+    if (!input) return;
+    transport.send({ type: 'sendTask', id: selectedOpenRouterAgentId, input });
+    setOpenRouterInput('');
+  };
 
   // Force dependency on editorTickForKeyboard to propagate keyboard-triggered re-renders
   void editorTickForKeyboard;
@@ -262,6 +290,16 @@ function App() {
             onCloseAgent={handleCloseAgent}
             alwaysShowOverlay={alwaysShowOverlay}
           />
+
+          {!editor.isEditMode && (
+            <WorkLogPanel
+              agents={agents}
+              officeState={officeState}
+              workLogs={agentWorkLogs}
+              transcripts={agentTranscripts}
+              errors={agentErrors}
+            />
+          )}
         </>
       ) : (
         <DebugView
@@ -336,11 +374,56 @@ function App() {
       <BottomToolbar
         isEditMode={editor.isEditMode}
         onOpenClaude={editor.handleOpenClaude}
+        onOpenOpenRouter={handleOpenOpenRouter}
         onToggleEditMode={editor.handleToggleEditMode}
         isSettingsOpen={isSettingsOpen}
         onToggleSettings={() => setIsSettingsOpen((v) => !v)}
         workspaceFolders={workspaceFolders}
       />
+
+      {selectedOpenRouterAgent && !isDebugMode && !editor.isEditMode && (
+        <div className="absolute right-10 bottom-10 z-20 pixel-panel p-6 w-180 max-w-[calc(100%-20px)]">
+          <div className="flex items-center justify-between gap-8 mb-4">
+            <div className="flex flex-col overflow-hidden">
+              <span className="text-sm text-accent-bright leading-none overflow-hidden text-ellipsis whitespace-nowrap">
+                {localizeDisplayName(selectedOpenRouterAgent.displayName ?? 'OpenRouter Agent')}
+              </span>
+              <span className="text-2xs text-text-muted leading-none">오픈라우터</span>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                officeState.selectedAgentId = null;
+                officeState.cameraFollowId = null;
+              }}
+            >
+              x
+            </Button>
+          </div>
+          <textarea
+            value={openRouterInput}
+            onChange={(e) => setOpenRouterInput(e.target.value)}
+            className="w-full h-56 bg-bg-dark border-2 border-border text-text p-4 text-sm resize-none outline-none"
+            placeholder="이 에이전트에게 맡길 작업을 입력하세요..."
+          />
+          <div className="flex items-center justify-end mt-4">
+            <Button variant="accent" size="sm" onClick={handleSendOpenRouterTask}>
+              보내기
+            </Button>
+          </div>
+          {agentErrors[selectedOpenRouterAgent.id] && (
+            <div className="mt-4 text-xs text-danger leading-tight">
+              {agentErrors[selectedOpenRouterAgent.id]}
+            </div>
+          )}
+          {agentTranscripts[selectedOpenRouterAgent.id] && (
+            <div className="mt-4 max-h-72 overflow-auto text-xs text-text-muted leading-tight whitespace-pre-wrap">
+              {agentTranscripts[selectedOpenRouterAgent.id]}
+            </div>
+          )}
+        </div>
+      )}
 
       <VersionIndicator
         currentVersion={extensionVersion}

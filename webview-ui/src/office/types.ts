@@ -188,6 +188,14 @@ export interface Character {
   matrixEffectSeeds: number[];
   /** Workspace folder name (only set for multi-root workspaces) */
   folderName?: string;
+  /** Backend/provider that owns this agent */
+  providerId?: 'claude' | 'openrouter';
+  /** Human-facing name independent from provider identity */
+  displayName?: string;
+  /** Short provider label shown in the overlay */
+  providerLabel?: string;
+  /** Role/profile template used to create this agent */
+  profileId?: string;
 
   // -- Agent Teams --
   /** Team name this agent belongs to */

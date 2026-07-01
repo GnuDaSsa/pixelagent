@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
+import { localizeActivityText } from '../localization.js';
 import { playDoneSound, playPermissionSound, setSoundEnabled } from '../notificationSound.js';
 import type { OfficeState } from '../office/engine/officeState.js';
 import { setFloorSprites } from '../office/floorTiles.js';
@@ -72,6 +73,32 @@ interface ExtensionMessageState {
   hooksEnabled: boolean;
   setHooksEnabled: (v: boolean) => void;
   hooksInfoShown: boolean;
+  agentTranscripts: Record<number, string>;
+  agentErrors: Record<number, string>;
+  agentWorkLogs: Record<number, string[]>;
+}
+
+const ENTRANCE_LINE = '자아, 선수 입장';
+
+function formatLogTime(): string {
+  return new Date().toLocaleTimeString('ko-KR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+}
+
+function announceEntrance(): void {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+  try {
+    const utterance = new SpeechSynthesisUtterance(ENTRANCE_LINE);
+    utterance.lang = 'ko-KR';
+    utterance.rate = 1.05;
+    utterance.pitch = 1.1;
+    window.speechSynthesis.speak(utterance);
+  } catch {
+    // Browser speech support is best-effort; the visual log is the reliable path.
+  }
 }
 
 function saveAgentSeats(os: OfficeState): void {
@@ -109,6 +136,18 @@ export function useExtensionMessages(
   const [alwaysShowLabels, setAlwaysShowLabels] = useState(false);
   const [hooksEnabled, setHooksEnabled] = useState(true);
   const [hooksInfoShown, setHooksInfoShown] = useState(true);
+  const [agentTranscripts, setAgentTranscripts] = useState<Record<number, string>>({});
+  const [agentErrors, setAgentErrors] = useState<Record<number, string>>({});
+  const [agentWorkLogs, setAgentWorkLogs] = useState<Record<number, string[]>>({});
+  const announcedToolStartsRef = useRef(new Set<string>());
+
+  const appendAgentWorkLog = (id: number, message: string) => {
+    setAgentWorkLogs((prev) => {
+      const line = `${formatLogTime()} ${message}`;
+      const list = prev[id] ?? [];
+      return { ...prev, [id]: [...list, line].slice(-80) };
+    });
+  };
 
   // Track whether initial layout has been loaded (ref to avoid re-render)
   const layoutReadyRef = useRef(false);
@@ -121,6 +160,10 @@ export function useExtensionMessages(
       hueShift?: number;
       seatId?: string;
       folderName?: string;
+      providerId?: 'claude' | 'openrouter';
+      providerLabel?: string;
+      displayName?: string;
+      profileId?: string;
     }> = [];
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -172,7 +215,12 @@ export function useExtensionMessages(
         }
         // Add buffered agents now that layout (and seats) are correct
         for (const p of pendingAgents) {
-          os.addAgent(p.id, p.palette, p.hueShift, p.seatId, true, p.folderName);
+          os.addAgent(p.id, p.palette, p.hueShift, p.seatId, true, p.folderName, {
+            providerId: p.providerId,
+            providerLabel: p.providerLabel,
+            displayName: p.displayName,
+            profileId: p.profileId,
+          });
         }
         pendingAgents = [];
         layoutReadyRef.current = true;
@@ -190,6 +238,12 @@ export function useExtensionMessages(
         const teammateName = msg.teammateName as string | undefined;
         const teammateParentId = msg.parentAgentId as number | undefined;
         const teamName = msg.teamName as string | undefined;
+        const agentMeta = {
+          providerId: (msg.providerId as 'claude' | 'openrouter' | undefined) ?? 'claude',
+          providerLabel: (msg.providerLabel as string | undefined) ?? 'Claude',
+          displayName: msg.displayName as string | undefined,
+          profileId: msg.profileId as string | undefined,
+        };
         setAgents((prev) => (prev.includes(id) ? prev : [...prev, id]));
         // Don't auto-select teammates (keep focus on lead)
         if (!isTeammate) {
@@ -201,7 +255,7 @@ export function useExtensionMessages(
           const parentCh = os.characters.get(teammateParentId);
           const palette = parentCh ? parentCh.palette : undefined;
           const hueShift = parentCh ? parentCh.hueShift : undefined;
-          os.addAgent(id, palette, hueShift, undefined, undefined, parentCh?.folderName);
+          os.addAgent(id, palette, hueShift, undefined, undefined, parentCh?.folderName, agentMeta);
           // Set team metadata on the character
           const ch = os.characters.get(id);
           if (ch) {
@@ -210,7 +264,7 @@ export function useExtensionMessages(
             ch.agentName = teammateName;
           }
         } else {
-          os.addAgent(id, undefined, undefined, undefined, undefined, folderName);
+          os.addAgent(id, undefined, undefined, undefined, undefined, folderName, agentMeta);
         }
         saveAgentSeats(os);
       } else if (msg.type === 'agentClosed') {
@@ -235,6 +289,24 @@ export function useExtensionMessages(
           delete next[id];
           return next;
         });
+        setAgentTranscripts((prev) => {
+          if (!(id in prev)) return prev;
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+        setAgentErrors((prev) => {
+          if (!(id in prev)) return prev;
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+        setAgentWorkLogs((prev) => {
+          if (!(id in prev)) return prev;
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
         // Remove all sub-agent characters belonging to this agent
         os.removeAllSubagents(id);
         setSubagentCharacters((prev) => prev.filter((s) => s.parentAgentId !== id));
@@ -246,16 +318,42 @@ export function useExtensionMessages(
           { palette?: number; hueShift?: number; seatId?: string }
         >;
         const folderNames = (msg.folderNames || {}) as Record<number, string>;
+        const providerIds = (msg.providerIds || {}) as Record<number, 'claude' | 'openrouter'>;
+        const providerLabels = (msg.providerLabels || {}) as Record<number, string>;
+        const displayNames = (msg.displayNames || {}) as Record<number, string>;
+        const profileIds = (msg.profileIds || {}) as Record<number, string>;
         // Buffer agents — they'll be added in layoutLoaded after seats are built
         for (const id of incoming) {
           const m = meta[id];
-          pendingAgents.push({
+          const pending = {
             id,
             palette: m?.palette,
             hueShift: m?.hueShift,
             seatId: m?.seatId,
             folderName: folderNames[id],
-          });
+            providerId: providerIds[id] ?? 'claude',
+            providerLabel: providerLabels[id] ?? 'Claude',
+            displayName: displayNames[id],
+            profileId: profileIds[id],
+          };
+          if (layoutReadyRef.current) {
+            os.addAgent(
+              id,
+              pending.palette,
+              pending.hueShift,
+              pending.seatId,
+              true,
+              pending.folderName,
+              {
+                providerId: pending.providerId,
+                providerLabel: pending.providerLabel,
+                displayName: pending.displayName,
+                profileId: pending.profileId,
+              },
+            );
+          } else {
+            pendingAgents.push(pending);
+          }
         }
         setAgents((prev) => {
           const ids = new Set(prev);
@@ -272,6 +370,12 @@ export function useExtensionMessages(
         const toolId = msg.toolId as string;
         const status = msg.status as string;
         const permissionActive = msg.permissionActive as boolean | undefined;
+        const startKey = `${id}:${toolId}`;
+        if (!announcedToolStartsRef.current.has(startKey)) {
+          announcedToolStartsRef.current.add(startKey);
+          appendAgentWorkLog(id, `${ENTRANCE_LINE} · ${localizeActivityText(status)}`);
+          announceEntrance();
+        }
         setAgentTools((prev) => {
           const list = prev[id] || [];
           if (list.some((t) => t.toolId === toolId)) return prev;
@@ -312,6 +416,7 @@ export function useExtensionMessages(
       } else if (msg.type === 'agentToolDone') {
         const id = msg.id as number;
         const toolId = msg.toolId as string;
+        appendAgentWorkLog(id, '작업 완료');
         setAgentTools((prev) => {
           const list = prev[id];
           if (!list) return prev;
@@ -553,6 +658,18 @@ export function useExtensionMessages(
       } else if (msg.type === 'agentTokenUsage') {
         const id = msg.id as number;
         os.setAgentTokens(id, msg.inputTokens as number, msg.outputTokens as number);
+      } else if (msg.type === 'agentTextDelta') {
+        const id = msg.id as number;
+        const delta = msg.delta as string;
+        setAgentTranscripts((prev) => ({ ...prev, [id]: (prev[id] ?? '') + delta }));
+      } else if (msg.type === 'agentTextDone') {
+        const id = msg.id as number;
+        appendAgentWorkLog(id, '응답 기록 완료');
+        setAgentTranscripts((prev) => ({ ...prev, [id]: msg.content as string }));
+      } else if (msg.type === 'agentRunError') {
+        const id = msg.id as number;
+        appendAgentWorkLog(id, `오류 발생: ${msg.message as string}`);
+        setAgentErrors((prev) => ({ ...prev, [id]: msg.message as string }));
       }
     };
     const unsubscribe = transport.onMessage(handler);
@@ -581,5 +698,8 @@ export function useExtensionMessages(
     hooksEnabled,
     setHooksEnabled,
     hooksInfoShown,
+    agentTranscripts,
+    agentErrors,
+    agentWorkLogs,
   };
 }

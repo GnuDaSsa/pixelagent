@@ -14,6 +14,11 @@ export interface PersistedAgent {
   jsonlFile: string;
   projectDir: string;
   folderName?: string;
+  providerId?: 'claude' | 'openrouter';
+  displayName?: string;
+  providerLabel?: string;
+  profileId?: string;
+  model?: string;
   teamName?: string;
   agentName?: string;
   isTeamLead?: boolean;

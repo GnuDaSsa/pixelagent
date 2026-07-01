@@ -3,6 +3,7 @@ import type { AgentStateStore } from './agentStateStore.js';
 import type { LoadedAssets, LoadedCharacterSprites, LoadedPetSprites } from './assetLoader.js';
 import { readConfig, writeConfig } from './configPersistence.js';
 import { readLayoutFromFile, writeLayoutToFile } from './layoutPersistence.js';
+import type { OpenRouterAgentRuntime } from './openrouter/runtime.js';
 import { claudeProvider } from './providers/index.js';
 
 type WsSend = (message: Record<string, unknown>) => void;
@@ -23,6 +24,7 @@ export interface AssetCache {
 export interface ClientMessageContext {
   store: AgentStateStore;
   runtime?: AgentRuntime;
+  openRouterRuntime?: OpenRouterAgentRuntime;
   cache: AssetCache | null;
   /** Install/uninstall hooks side effect. Needs server url+token known only to cli.ts. */
   onSetHooksEnabled?: SetHooksEnabledSideEffect;
@@ -54,6 +56,21 @@ export function handleClientMessage(
   switch (msg.type) {
     case 'webviewReady':
       handleWebviewReady(send, ctx);
+      break;
+
+    case 'createAgent':
+      if (msg.providerId === 'openrouter') {
+        ctx.openRouterRuntime?.createAgent({
+          cwd: msg.folderPath as string | undefined,
+          displayName: msg.displayName as string | undefined,
+          profileId: msg.profileId as string | undefined,
+          model: msg.model as string | undefined,
+        });
+      }
+      break;
+
+    case 'sendTask':
+      void ctx.openRouterRuntime?.sendTask(msg.id as number, msg.input as string);
       break;
 
     case 'saveLayout':
@@ -202,6 +219,10 @@ function handleWebviewReady(send: WsSend, ctx: ClientMessageContext): void {
   const agentIds: number[] = [];
   const folderNames: Record<number, string> = {};
   const externalAgents: Record<number, boolean> = {};
+  const providerIds: Record<number, string> = {};
+  const providerLabels: Record<number, string> = {};
+  const displayNames: Record<number, string> = {};
+  const profileIds: Record<number, string> = {};
   for (const [id, agent] of store) {
     agentIds.push(id);
     if (agent.folderName) {
@@ -209,6 +230,14 @@ function handleWebviewReady(send: WsSend, ctx: ClientMessageContext): void {
     }
     if (agent.isExternal) {
       externalAgents[id] = true;
+    }
+    providerIds[id] = agent.providerId ?? 'claude';
+    providerLabels[id] = agent.providerLabel ?? 'Claude';
+    if (agent.displayName) {
+      displayNames[id] = agent.displayName;
+    }
+    if (agent.profileId) {
+      profileIds[id] = agent.profileId;
     }
   }
   const seats = adapter?.loadSeats() ?? {};
@@ -218,5 +247,9 @@ function handleWebviewReady(send: WsSend, ctx: ClientMessageContext): void {
     agentMeta: seats,
     folderNames,
     externalAgents,
+    providerIds,
+    providerLabels,
+    displayNames,
+    profileIds,
   });
 }

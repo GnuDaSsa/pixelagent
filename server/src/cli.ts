@@ -22,6 +22,7 @@ import {
 } from './assetLoader.js';
 import type { AssetCache } from './clientMessageHandler.js';
 import { FileStateAdapter } from './fileStateAdapter.js';
+import { OpenRouterAgentRuntime } from './openrouter/runtime.js';
 import { claudeProvider, copyHookScript } from './providers/index.js';
 import { PixelAgentsServer } from './server.js';
 
@@ -91,6 +92,7 @@ async function main(): Promise<void> {
   try {
     // Create runtime first (before server.start, so we can pass it in)
     const runtime = new AgentRuntime(store, claudeProvider);
+    const openRouterRuntime = new OpenRouterAgentRuntime(store);
 
     // Wire hook events: HTTP POST -> runtime -> hookEventHandler -> agents
     server.onHookEvent((providerId, event) => {
@@ -118,6 +120,7 @@ async function main(): Promise<void> {
     const config = await server.start({
       store,
       runtime,
+      openRouterRuntime,
       embedded: false,
       host: args.host,
       port: args.port,
